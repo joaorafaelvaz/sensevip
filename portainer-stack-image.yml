@@ -41,8 +41,6 @@ services:
       - HOSTNAME=0.0.0.0
     volumes:
       - satisfycam-data:/app/data
-    networks:
-      - satisfycam-net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3007/"]
       interval: 30s
