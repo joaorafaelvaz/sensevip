@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("OPERATOR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id             String      @id @default(cuid())
+  faceDescriptor String      // JSON serialized Float32Array (128 dims)
+  snapshotPath   String
+  firstSeenAt    DateTime    @default(now())
+  lastSeenAt     DateTime    @updatedAt
+  visitCount     Int         @default(1)
+  detections     Detection[]
+  createdAt      DateTime    @default(now())
+}
+
+model Detection {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  timestamp       DateTime @default(now())
+  snapshotPath    String
+  expression      String   // HAPPY, SAD, ANGRY, DISGUSTED, FEARFUL, SURPRISED, NEUTRAL
+  satisfactionTag String   // SATISFIED, NEUTRAL, UNSATISFIED
+  confidence      Float
+  rawExpressions  String   // JSON { happy: 0.8, sad: 0.01, ... }
+  storeId         String?
+  createdAt       DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([satisfactionTag])
+}
+
+model DailyReport {
+  id             String   @id @default(cuid())
+  date           DateTime @unique
+  totalCustomers Int      @default(0)
+  satisfied      Int      @default(0)
+  neutral        Int      @default(0)
+  unsatisfied    Int      @default(0)
+  avgConfidence  Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

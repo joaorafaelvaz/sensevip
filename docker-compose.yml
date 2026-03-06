@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: satisfycam-app
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    environment:
+      - DATABASE_URL=file:/app/prisma/prod.db
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production}
+      - SNAPSHOT_STORAGE_PATH=/app/storage/snapshots
+      - NEXT_PUBLIC_APP_NAME=SatisfyCAM
+      - NEXT_PUBLIC_STORE_NAME=${STORE_NAME:-Barbearia VIP - Centro}
+    volumes:
+      - satisfycam-db:/app/prisma
+      - satisfycam-snapshots:/app/storage/snapshots
+    networks:
+      - satisfycam-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: satisfycam-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt
+    depends_on:
+      - app
+    networks:
+      - satisfycam-net
+
+  certbot:
+    image: certbot/certbot
+    container_name: satisfycam-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+    depends_on:
+      - nginx
+    # Renovar certificado: docker compose run certbot renew
+    command: echo "Certbot ready. Run 'docker compose run certbot certonly --webroot -w /var/lib/letsencrypt -d satisfycam.barbeariavip.cloud' to get a cert."
+
+volumes:
+  satisfycam-db:
+  satisfycam-snapshots:
+  certbot-etc:
+  certbot-var:
+
+networks:
+  satisfycam-net:
+    driver: bridge

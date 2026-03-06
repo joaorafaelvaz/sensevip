@@ -1,0 +1,95 @@
+version: "3.8"
+
+# =====================================================
+# SatisfyCAM - Portainer Stack
+# =====================================================
+# Como usar no Portainer:
+#
+# OPCAO 1 - Via repositorio Git:
+#   1. Stacks > Add Stack > Repository
+#   2. Repository URL: seu-repo-git
+#   3. Compose path: portainer-stack.yml
+#   4. Preencha as Environment Variables abaixo
+#
+# OPCAO 2 - Via Web Editor:
+#   1. Stacks > Add Stack > Web Editor
+#   2. Cole este conteudo
+#   3. Preencha as Environment Variables abaixo
+#
+# Environment Variables obrigatorias no Portainer:
+#   - JWT_SECRET         (ex: gere com: openssl rand -base64 32)
+#   - STORE_NAME         (ex: Barbearia VIP - Centro)
+#   - DOMAIN             (ex: v2.sensevip.ia.br)
+# =====================================================
+
+services:
+  app:
+    image: node:20-alpine
+    container_name: satisfycam-app
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/prod.db
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production}
+      - SNAPSHOT_STORAGE_PATH=/app/data/snapshots
+      - NEXT_PUBLIC_APP_NAME=SatisfyCAM
+      - NEXT_PUBLIC_STORE_NAME=${STORE_NAME:-Barbearia VIP - Centro}
+      - PORT=3007
+      - HOSTNAME=0.0.0.0
+    volumes:
+      - satisfycam-app:/app
+      - satisfycam-data:/app/data
+    entrypoint: /bin/sh
+    command: >
+      -c "
+        if [ ! -f /app/server.js ]; then
+          echo 'PRIMEIRO DEPLOY: Aguardando build da imagem...'
+          echo 'Use o script de deploy ou faca build manual da imagem satisfycam.'
+          sleep infinity
+        fi
+        node server.js
+      "
+    networks:
+      - satisfycam-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  nginx:
+    image: nginx:alpine
+    container_name: satisfycam-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx-conf:/etc/nginx/conf.d
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt
+    depends_on:
+      - app
+    networks:
+      - satisfycam-net
+
+  certbot:
+    image: certbot/certbot
+    container_name: satisfycam-certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+    depends_on:
+      - nginx
+    command: echo "Certbot pronto. Execute manualmente para gerar certificado."
+
+volumes:
+  satisfycam-app:
+  satisfycam-data:
+  nginx-conf:
+  certbot-etc:
+  certbot-var:
+
+networks:
+  satisfycam-net:
+    driver: bridge
