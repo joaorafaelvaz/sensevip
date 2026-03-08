@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export async function DELETE() {
+  try {
+    // Delete all detections first (FK constraint), then customers
+    await prisma.detection.deleteMany();
+    await prisma.customer.deleteMany();
+    await prisma.dailyReport.deleteMany();
+    return NextResponse.json({ success: true, message: "Base de clientes limpa" });
+  } catch (err) {
+    console.error("DELETE /api/customers error:", err);
+    return NextResponse.json({ error: "Erro ao limpar base" }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") || "1", 10);

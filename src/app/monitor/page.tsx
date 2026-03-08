@@ -11,8 +11,9 @@ import { useLiveStats } from "@/hooks/useLiveStats";
 
 export default function MonitorPage() {
   const router = useRouter();
-  const { stats, isConnected } = useLiveStats();
+  const { stats, isConnected, refresh } = useLiveStats();
   const [currentTime, setCurrentTime] = useState("");
+  const [isClearing, setIsClearing] = useState(false);
   const storeName = process.env.NEXT_PUBLIC_STORE_NAME || "SatisfyCAM";
 
   useEffect(() => {
@@ -93,6 +94,27 @@ export default function MonitorPage() {
           onClick={() => router.push("/customers")}
         />
         <div className="flex-1" />
+        <button
+          disabled={isClearing}
+          onClick={async () => {
+            if (!confirm("Tem certeza que deseja excluir TODOS os clientes e detecções? Esta ação não pode ser desfeita.")) return;
+            setIsClearing(true);
+            try {
+              const res = await fetch("/api/customers", { method: "DELETE" });
+              if (res.ok) {
+                refresh();
+              } else {
+                alert("Erro ao limpar base de clientes");
+              }
+            } catch {
+              alert("Erro de conexão");
+            }
+            setIsClearing(false);
+          }}
+          className="px-4 py-1.5 text-sm text-red-400 hover:text-white hover:bg-red-600/80 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {isClearing ? "Limpando..." : "Limpar Base"}
+        </button>
         <NavButton label="Sair" onClick={() => router.push("/login")} />
       </footer>
     </div>

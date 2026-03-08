@@ -36,7 +36,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production}
       - SNAPSHOT_STORAGE_PATH=/app/data/snapshots
       - NEXT_PUBLIC_APP_NAME=SatisfyCAM
-      - NEXT_PUBLIC_STORE_NAME=${STORE_NAME:-Barbearia VIP - Centro}
+      - NEXT_PUBLIC_STORE_NAME=${STORE_NAME:-Barbearia VIP Santa Mônica}
       - PORT=3007
       - HOSTNAME=0.0.0.0
     volumes:
