@@ -7,9 +7,11 @@ import {
   getDominantExpression,
   type ExpressionScores,
 } from "@/lib/satisfaction-mapper";
-import { serializeDescriptor } from "@/lib/descriptor-utils";
-import { cropFaceFromCanvas, canvasToBlob, uploadSnapshot } from "@/lib/snapshot-utils";
-import { DETECTION_CONFIG } from "@/config/detection";
+import {
+  cropFaceFromCanvas,
+  canvasToBlob,
+  uploadSnapshot,
+} from "@/lib/snapshot-utils";
 import type { LiveDetection } from "@/types/detection";
 
 interface FaceDetectionState {
@@ -19,6 +21,10 @@ interface FaceDetectionState {
   fps: number;
   detections: LiveDetection[];
 }
+
+const DETECTION_INTERVAL = 1500;
+const API_SUBMIT_INTERVAL = 10000; // Only submit to API every 10s per face
+const MIN_CONFIDENCE = 0.4;
 
 export function useFaceDetection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -33,8 +39,11 @@ export function useFaceDetection(
     detections: [],
   });
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const lastDetectionTime = useRef<number>(0);
+  const lastApiSubmitTime = useRef<number>(0);
   const lastFrameTime = useRef<number>(0);
+  const isProcessing = useRef(false);
 
   const loadModels = useCallback(async () => {
     try {
@@ -45,130 +54,210 @@ export function useFaceDetection(
     }
   }, []);
 
-  const detectFaces = useCallback(async () => {
+  // Submit detection to API in background (non-blocking)
+  const submitToApi = useCallback(
+    (
+      video: HTMLVideoElement,
+      box: { x: number; y: number; width: number; height: number },
+      descriptor: Float32Array,
+      dominant: string,
+      satisfaction: string,
+      confidence: number,
+      expressions: ExpressionScores
+    ) => {
+      // Fire and forget — don't block the detection loop
+      (async () => {
+        try {
+          const faceCanvas = cropFaceFromCanvas(video, box);
+          const blob = await canvasToBlob(faceCanvas);
+          const snapshotPath = await uploadSnapshot(blob);
+
+          const res = await fetch("/api/detections", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              descriptor: Array.from(descriptor),
+              expression: dominant,
+              satisfactionTag: satisfaction,
+              confidence,
+              rawExpressions: expressions,
+              snapshotPath,
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (!data.skipped) {
+              setState((prev) => ({
+                ...prev,
+                detections: [
+                  {
+                    expression: dominant,
+                    satisfactionTag: satisfaction,
+                    confidence,
+                    timestamp: new Date().toISOString(),
+                    customerIsNew: data.isNew,
+                  },
+                  ...prev.detections,
+                ].slice(0, 50),
+              }));
+            }
+          }
+        } catch (err) {
+          console.error("API submit error:", err);
+        }
+      })();
+    },
+    []
+  );
+
+  const detectLoop = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || video.paused || video.ended) return;
+    if (!video || !canvas || video.paused || video.ended || !isActive) return;
 
     const now = performance.now();
-    const fps =
-      lastFrameTime.current > 0
-        ? Math.round(1000 / (now - lastFrameTime.current))
-        : 0;
+
+    // FPS counter
+    if (lastFrameTime.current > 0) {
+      const fps = Math.round(1000 / (now - lastFrameTime.current));
+      setState((prev) => {
+        if (prev.fps !== fps) return { ...prev, fps };
+        return prev;
+      });
+    }
     lastFrameTime.current = now;
 
-    const displaySize = { width: video.videoWidth, height: video.videoHeight };
-    faceapi.matchDimensions(canvas, displaySize);
+    // Only run detection at interval, not every frame
+    if (now - lastDetectionTime.current >= DETECTION_INTERVAL && !isProcessing.current) {
+      lastDetectionTime.current = now;
+      isProcessing.current = true;
 
-    const results = await faceapi
-      .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
-        inputSize: 416,
-        scoreThreshold: DETECTION_CONFIG.minDetectionConfidence,
-      }))
-      .withFaceLandmarks()
-      .withFaceExpressions()
-      .withFaceDescriptors();
+      const shouldSubmitApi = now - lastApiSubmitTime.current >= API_SUBMIT_INTERVAL;
 
-    const resized = faceapi.resizeResults(results, displaySize);
+      const inputSize = shouldSubmitApi ? 224 : 160;
 
-    // Draw overlays
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+      // Run detection async
+      (async () => {
+        try {
+          const results = await faceapi
+            .detectAllFaces(
+              video,
+              new faceapi.TinyFaceDetectorOptions({
+                inputSize,
+                scoreThreshold: MIN_CONFIDENCE,
+              })
+            )
+            .withFaceLandmarks()
+            .withFaceExpressions()
+            .withFaceDescriptors();
 
-    const newDetections: LiveDetection[] = [];
+          {
+          const displaySize = {
+            width: video.videoWidth,
+            height: video.videoHeight,
+          };
+          faceapi.matchDimensions(canvas, displaySize);
+          const resized = faceapi.resizeResults(results, displaySize);
 
-    for (const detection of resized) {
-      const expressions = detection.expressions as unknown as ExpressionScores;
-      const satisfaction = mapExpressionToSatisfaction(expressions);
-      const dominant = getDominantExpression(expressions);
-      const confidence = Math.max(...Object.values(expressions));
-      const descriptor = serializeDescriptor(detection.descriptor);
+          // Draw overlays
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
 
-      // Draw bounding box
-      const box = detection.detection.box;
-      if (ctx) {
-        const color =
-          satisfaction === "SATISFIED"
-            ? "#22c55e"
-            : satisfaction === "UNSATISFIED"
-            ? "#ef4444"
-            : "#eab308";
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
+          for (const detection of resized) {
+            const expressions =
+              detection.expressions as unknown as ExpressionScores;
+            const satisfaction = mapExpressionToSatisfaction(expressions);
+            const dominant = getDominantExpression(expressions);
+            const confidence = Math.max(...Object.values(expressions));
 
-        // Label
-        const label = `${dominant} ${Math.round(confidence * 100)}%`;
-        ctx.fillStyle = color;
-        ctx.fillRect(box.x, box.y - 24, ctx.measureText(label).width + 16, 24);
-        ctx.fillStyle = "#fff";
-        ctx.font = "14px sans-serif";
-        ctx.fillText(label, box.x + 8, box.y - 7);
-      }
+            // Draw bounding box
+            const box = detection.detection.box;
+            if (ctx) {
+              const color =
+                satisfaction === "SATISFIED"
+                  ? "#22c55e"
+                  : satisfaction === "UNSATISFIED"
+                  ? "#ef4444"
+                  : "#eab308";
 
-      // Send to API
-      try {
-        const faceCanvas = cropFaceFromCanvas(video, box);
-        const blob = await canvasToBlob(faceCanvas);
-        const snapshotPath = await uploadSnapshot(blob);
+              // Box
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 2;
+              ctx.strokeRect(box.x, box.y, box.width, box.height);
 
-        const res = await fetch("/api/detections", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            descriptor: JSON.parse(descriptor),
-            expression: dominant,
-            satisfactionTag: satisfaction,
-            confidence,
-            rawExpressions: expressions,
-            snapshotPath,
-          }),
-        });
+              // Label background
+              const label = `${dominant} ${Math.round(confidence * 100)}%`;
+              ctx.font = "bold 13px sans-serif";
+              const textWidth = ctx.measureText(label).width;
+              ctx.fillStyle = color;
+              ctx.fillRect(box.x, box.y - 26, textWidth + 14, 24);
 
-        if (res.ok) {
-          const data = await res.json();
-          newDetections.push({
-            expression: dominant,
-            satisfactionTag: satisfaction,
-            confidence,
-            timestamp: new Date().toISOString(),
-            customerIsNew: data.isNew,
+              // Label text
+              ctx.fillStyle = "#fff";
+              ctx.fillText(label, box.x + 7, box.y - 9);
+            }
+
+            // Submit to API only on the slower interval
+            if (shouldSubmitApi && detection.descriptor) {
+              lastApiSubmitTime.current = now;
+              submitToApi(
+                video,
+                box,
+                detection.descriptor,
+                dominant,
+                satisfaction,
+                confidence,
+                expressions
+              );
+            }
+          }
+
+          setState((prev) => {
+            if (prev.facesDetected !== resized.length) {
+              return { ...prev, facesDetected: resized.length };
+            }
+            return prev;
           });
+
+          isProcessing.current = false;
+          }
+        } catch (err) {
+          console.error("Detection error:", err);
+          isProcessing.current = false;
         }
-      } catch (err) {
-        console.error("Failed to process detection:", err);
-      }
+      })();
     }
 
-    setState((prev) => ({
-      ...prev,
-      facesDetected: resized.length,
-      fps,
-      detections:
-        newDetections.length > 0
-          ? [...newDetections, ...prev.detections].slice(0, 50)
-          : prev.detections,
-    }));
-  }, [videoRef, canvasRef]);
+    animFrameRef.current = requestAnimationFrame(detectLoop);
+  }, [videoRef, canvasRef, isActive, submitToApi]);
 
   const startDetection = useCallback(() => {
-    if (intervalRef.current) return;
     setState((prev) => ({ ...prev, isDetecting: true }));
-    intervalRef.current = setInterval(
-      detectFaces,
-      DETECTION_CONFIG.analysisInterval
-    );
-  }, [detectFaces]);
+    lastDetectionTime.current = 0;
+    lastApiSubmitTime.current = 0;
+    lastFrameTime.current = 0;
+    isProcessing.current = false;
+    animFrameRef.current = requestAnimationFrame(detectLoop);
+  }, [detectLoop]);
 
   const stopDetection = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
     }
+    isProcessing.current = false;
     setState((prev) => ({ ...prev, isDetecting: false, facesDetected: 0 }));
-  }, []);
+
+    // Clear canvas
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, [canvasRef]);
 
   useEffect(() => {
     loadModels();

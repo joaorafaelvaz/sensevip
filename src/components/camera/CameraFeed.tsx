@@ -5,7 +5,16 @@ import { useCamera } from "@/hooks/useCamera";
 import { useFaceDetection } from "@/hooks/useFaceDetection";
 
 export default function CameraFeed() {
-  const { videoRef, isActive, error, startCamera, stopCamera } = useCamera();
+  const {
+    videoRef,
+    isActive,
+    error,
+    devices,
+    selectedDeviceId,
+    startCamera,
+    stopCamera,
+    switchCamera,
+  } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isModelLoaded, isDetecting, facesDetected, fps } = useFaceDetection(
     videoRef,
@@ -15,6 +24,25 @@ export default function CameraFeed() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Camera selector */}
+      {devices.length > 1 && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Camera:</label>
+          <select
+            value={selectedDeviceId}
+            onChange={(e) => switchCamera(e.target.value)}
+            className="flex-1 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {devices.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Video feed */}
       <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
         <video
           ref={videoRef}
@@ -43,6 +71,11 @@ export default function CameraFeed() {
                 />
               </svg>
               <p className="text-sm">Camera desligada</p>
+              {devices.length === 0 && (
+                <p className="text-xs text-gray-600 mt-1">
+                  Nenhuma camera encontrada
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -54,6 +87,7 @@ export default function CameraFeed() {
         </div>
       )}
 
+      {/* Status bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-sm text-gray-400">
           <span className="flex items-center gap-1.5">
@@ -76,7 +110,7 @@ export default function CameraFeed() {
         </div>
 
         <button
-          onClick={isActive ? stopCamera : startCamera}
+          onClick={isActive ? stopCamera : () => startCamera()}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             isActive
               ? "bg-red-600 hover:bg-red-700 text-white"
