@@ -14,41 +14,24 @@ export default function StatsCards({
   unsatisfied,
 }: StatsCardsProps) {
   const cards = [
-    {
-      label: "Total",
-      value: totalCustomers,
-      color: "text-blue-400",
-      bg: "bg-blue-500/10 border-blue-500/20",
-    },
-    {
-      label: "Satisfeitos",
-      value: satisfied,
-      color: "text-green-400",
-      bg: "bg-green-500/10 border-green-500/20",
-    },
-    {
-      label: "Neutros",
-      value: neutral,
-      color: "text-yellow-400",
-      bg: "bg-yellow-500/10 border-yellow-500/20",
-    },
-    {
-      label: "Insatisfeitos",
-      value: unsatisfied,
-      color: "text-red-400",
-      bg: "bg-red-500/10 border-red-500/20",
-    },
+    { label: "Clientes", value: totalCustomers, accent: "text-[var(--gold)]", dot: "bg-[var(--gold)]" },
+    { label: "Satisfeitos", value: satisfied, accent: "text-emerald-400", dot: "bg-emerald-400" },
+    { label: "Neutros", value: neutral, accent: "text-amber-400", dot: "bg-amber-400" },
+    { label: "Insatisfeitos", value: unsatisfied, accent: "text-red-400", dot: "bg-red-400" },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-2 gap-2.5 stagger">
       {cards.map((card) => (
         <div
           key={card.label}
-          className={`rounded-lg border p-3 ${card.bg}`}
+          className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-3.5 transition-colors hover:border-[var(--border)]/80"
         >
-          <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
-          <p className="text-xs text-gray-400 mt-1">{card.label}</p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${card.dot} opacity-60`} />
+            <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-widest">{card.label}</span>
+          </div>
+          <p className={`text-2xl font-semibold font-mono tracking-tight ${card.accent}`}>{card.value}</p>
         </div>
       ))}
     </div>

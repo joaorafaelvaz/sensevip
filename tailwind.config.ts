@@ -8,9 +8,26 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"],
+      },
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        gold: {
+          DEFAULT: "#c9a84c",
+          light: "#e2c97e",
+          dim: "#8a7033",
+          faint: "rgba(201, 168, 76, 0.08)",
+        },
+        surface: {
+          DEFAULT: "#0a0a0c",
+          raised: "#111114",
+          overlay: "#18181d",
+        },
+        border: {
+          DEFAULT: "#222228",
+          subtle: "#1a1a1f",
+        },
       },
     },
   },

@@ -37,51 +37,57 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950">
-      <div className="w-full max-w-sm">
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white">SatisfyCAM</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Monitoramento de Satisfacao
-            </p>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--surface)] relative overflow-hidden">
+      {/* Decorative ambient light */}
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-[var(--gold)]/[0.03] blur-[120px]" />
+      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-[var(--gold)]/[0.02] blur-[100px]" />
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="relative w-full max-w-[380px] px-6 animate-fade-up">
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 mb-5">
+            <svg className="w-7 h-7 text-[var(--gold)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">SatisfyCAM</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1.5 tracking-wide">Barbearia VIP Santa Monica</p>
+        </div>
+
+        {/* Form card */}
+        <div className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-2xl p-7">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Email</label>
+              <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-2 uppercase tracking-widest">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[var(--text-primary)] text-sm placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--gold-dim)] transition-colors"
                 placeholder="admin@satisfycam.com"
                 required
               />
             </div>
-
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Senha</label>
+              <label className="block text-[10px] font-medium text-[var(--text-muted)] mb-2 uppercase tracking-widest">Senha</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="********"
+                className="w-full px-4 py-3 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[var(--text-primary)] text-sm placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--gold-dim)] transition-colors"
+                placeholder="••••••••"
                 required
               />
             </div>
 
             {error && (
-              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
-                {error}
-              </p>
+              <p className="text-sm text-red-400 bg-red-500/5 border border-red-500/10 rounded-xl p-3">{error}</p>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+              className="w-full py-3 bg-[var(--gold)] hover:bg-[var(--gold-light)] disabled:opacity-50 text-[var(--surface)] text-sm font-semibold rounded-xl transition-all duration-200 hover:shadow-[0_0_20px_rgba(201,168,76,0.25)]"
             >
               {loading ? "Entrando..." : "Entrar"}
             </button>

@@ -25,6 +25,7 @@ export default function MonitorPage() {
           year: "numeric",
           hour: "2-digit",
           minute: "2-digit",
+          second: "2-digit",
         })
       );
     };
@@ -34,33 +35,37 @@ export default function MonitorPage() {
   }, []);
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-[var(--surface)]">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 bg-gray-900 border-b border-gray-800">
+      <header className="flex items-center justify-between px-6 py-3 bg-[var(--surface-raised)] border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-white">SatisfyCAM</h1>
-          <span
-            className={`w-2 h-2 rounded-full ${
-              isConnected ? "bg-green-500" : "bg-red-500"
-            }`}
-          />
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-[var(--gold)]/10 border border-[var(--gold)]/20 flex items-center justify-center">
+              <svg className="w-3.5 h-3.5 text-[var(--gold)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h1 className="text-sm font-semibold text-[var(--text-primary)] tracking-tight">SatisfyCAM</h1>
+          </div>
+          <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"}`} />
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-400">
-          <span>Loja: {storeName}</span>
-          <span>{currentTime}</span>
+
+        <div className="flex items-center gap-5 text-[11px] font-mono text-[var(--text-muted)]">
+          <span>{storeName}</span>
+          <span className="text-[var(--text-muted)]/60">{currentTime}</span>
         </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Camera Panel */}
-        <div className="flex-1 p-6 flex flex-col">
+        <div className="flex-1 p-5 flex flex-col">
           <CameraFeed />
         </div>
 
         {/* Dashboard Sidebar */}
-        <aside className="w-[380px] border-l border-gray-800 bg-gray-900/50 p-4 overflow-y-auto flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+        <aside className="w-[360px] border-l border-[var(--border)] bg-[var(--surface-raised)]/30 p-4 overflow-y-auto flex flex-col gap-3">
+          <h2 className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-1">
             Dashboard do Dia
           </h2>
 
@@ -83,55 +88,41 @@ export default function MonitorPage() {
         </aside>
       </div>
 
-      {/* Footer Navigation */}
-      <footer className="flex items-center gap-2 px-6 py-2 bg-gray-900 border-t border-gray-800">
-        <NavButton
-          label="Relatorios"
-          onClick={() => router.push("/reports")}
-        />
-        <NavButton
-          label="Base de Clientes"
-          onClick={() => router.push("/customers")}
-        />
+      {/* Footer */}
+      <footer className="flex items-center gap-1 px-5 py-2 bg-[var(--surface-raised)] border-t border-[var(--border)]">
+        <NavButton label="Relatorios" onClick={() => router.push("/reports")} />
+        <NavButton label="Clientes" onClick={() => router.push("/customers")} />
         <div className="flex-1" />
         <button
           disabled={isClearing}
           onClick={async () => {
-            if (!confirm("Tem certeza que deseja excluir TODOS os clientes e detecções? Esta ação não pode ser desfeita.")) return;
+            if (!confirm("Tem certeza que deseja excluir TODOS os clientes e deteccoes? Esta acao nao pode ser desfeita.")) return;
             setIsClearing(true);
             try {
               const res = await fetch("/api/customers", { method: "DELETE" });
-              if (res.ok) {
-                refresh();
-              } else {
-                alert("Erro ao limpar base de clientes");
-              }
+              if (res.ok) refresh();
+              else alert("Erro ao limpar base de clientes");
             } catch {
-              alert("Erro de conexão");
+              alert("Erro de conexao");
             }
             setIsClearing(false);
           }}
-          className="px-4 py-1.5 text-sm text-red-400 hover:text-white hover:bg-red-600/80 rounded-lg transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 text-[11px] font-medium text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
         >
           {isClearing ? "Limpando..." : "Limpar Base"}
         </button>
+        <div className="w-px h-4 bg-[var(--border)] mx-1" />
         <NavButton label="Sair" onClick={() => router.push("/login")} />
       </footer>
     </div>
   );
 }
 
-function NavButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
+function NavButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="px-4 py-1.5 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+      className="px-3 py-1.5 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-overlay)] rounded-lg transition-colors"
     >
       {label}
     </button>

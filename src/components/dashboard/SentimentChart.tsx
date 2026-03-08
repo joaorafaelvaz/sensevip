@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import type { DetectionResult } from "@/types/detection";
 
@@ -17,11 +15,7 @@ interface SentimentChartProps {
 }
 
 export default function SentimentChart({ detections }: SentimentChartProps) {
-  // Group detections by hour
-  const hourlyData: Record<
-    string,
-    { satisfied: number; neutral: number; unsatisfied: number }
-  > = {};
+  const hourlyData: Record<string, { satisfied: number; neutral: number; unsatisfied: number }> = {};
 
   for (const d of detections) {
     const hour = new Date(d.timestamp).toLocaleTimeString("pt-BR", {
@@ -42,59 +36,48 @@ export default function SentimentChart({ detections }: SentimentChartProps) {
 
   if (chartData.length === 0) {
     return (
-      <div className="rounded-lg bg-gray-800 border border-gray-700 p-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-3">
-          Sentimentos (Tempo Real)
-        </h3>
-        <p className="text-xs text-gray-500">Sem dados ainda</p>
+      <div className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-4">
+        <h3 className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-widest mb-3">Sentimentos</h3>
+        <p className="text-xs text-[var(--text-muted)]">Sem dados ainda</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg bg-gray-800 border border-gray-700 p-4">
-      <h3 className="text-sm font-medium text-gray-300 mb-3">
-        Sentimentos (Tempo Real)
-      </h3>
-      <ResponsiveContainer width="100%" height={180}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis dataKey="time" stroke="#6b7280" fontSize={10} />
-          <YAxis stroke="#6b7280" fontSize={10} />
+    <div className="bg-[var(--surface-raised)] border border-[var(--border)] rounded-xl p-4">
+      <h3 className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-widest mb-3">Sentimentos</h3>
+      <ResponsiveContainer width="100%" height={150}>
+        <AreaChart data={chartData}>
+          <defs>
+            <linearGradient id="gSatisfied" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#4ade80" stopOpacity={0.2} />
+              <stop offset="95%" stopColor="#4ade80" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="gNeutral" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="gUnsatisfied" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f87171" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis dataKey="time" stroke="#3a3a42" fontSize={9} tickLine={false} axisLine={false} />
+          <YAxis stroke="#3a3a42" fontSize={9} tickLine={false} axisLine={false} width={24} />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#1f2937",
-              border: "1px solid #374151",
-              borderRadius: "8px",
-              fontSize: "12px",
+              backgroundColor: "var(--surface-overlay)",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              color: "var(--text-primary)",
             }}
           />
-          <Legend iconSize={8} wrapperStyle={{ fontSize: "11px" }} />
-          <Line
-            type="monotone"
-            dataKey="satisfied"
-            stroke="#22c55e"
-            name="Satisfeitos"
-            strokeWidth={2}
-            dot={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="neutral"
-            stroke="#eab308"
-            name="Neutros"
-            strokeWidth={2}
-            dot={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="unsatisfied"
-            stroke="#ef4444"
-            name="Insatisfeitos"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
+          <Area type="monotone" dataKey="satisfied" stroke="#4ade80" strokeWidth={1.5} fill="url(#gSatisfied)" name="Satisfeitos" />
+          <Area type="monotone" dataKey="neutral" stroke="#fbbf24" strokeWidth={1.5} fill="url(#gNeutral)" name="Neutros" />
+          <Area type="monotone" dataKey="unsatisfied" stroke="#f87171" strokeWidth={1.5} fill="url(#gUnsatisfied)" name="Insatisfeitos" />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
