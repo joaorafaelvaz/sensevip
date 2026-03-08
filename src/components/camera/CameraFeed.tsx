@@ -16,11 +16,8 @@ export default function CameraFeed() {
     switchCamera,
   } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { isModelLoaded, isDetecting, facesDetected, fps } = useFaceDetection(
-    videoRef,
-    canvasRef,
-    isActive
-  );
+  const { isModelLoaded, isDetecting, facesDetected, fps, detections } =
+    useFaceDetection(videoRef, canvasRef, isActive);
 
   return (
     <div className="flex flex-col gap-3">
@@ -102,6 +99,7 @@ export default function CameraFeed() {
             <>
               <span>FPS: {fps}</span>
               <span>Faces: {facesDetected}</span>
+              <span className="text-blue-400">Salvos: {detections.length}</span>
             </>
           )}
           {!isModelLoaded && isActive && (

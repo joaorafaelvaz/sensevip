@@ -164,7 +164,8 @@ export function useFaceDetection(
             .withFaceExpressions()
             .withFaceDescriptors();
 
-          {
+          console.log(`[SatisfyCAM] Detection found ${results.length} face(s)`);
+
           const displaySize = {
             width: video.videoWidth,
             height: video.videoHeight,
@@ -178,7 +179,10 @@ export function useFaceDetection(
             ctx.clearRect(0, 0, canvas.width, canvas.height);
           }
 
-          for (const detection of resized) {
+          for (let i = 0; i < resized.length; i++) {
+            const detection = resized[i];
+            // Use original result's descriptor (resizeResults may not preserve it)
+            const originalDescriptor = results[i]?.descriptor;
             const expressions =
               detection.expressions as unknown as ExpressionScores;
             const satisfaction = mapExpressionToSatisfaction(expressions);
@@ -195,34 +199,34 @@ export function useFaceDetection(
                   ? "#ef4444"
                   : "#eab308";
 
-              // Box
               ctx.strokeStyle = color;
               ctx.lineWidth = 2;
               ctx.strokeRect(box.x, box.y, box.width, box.height);
 
-              // Label background
               const label = `${dominant} ${Math.round(confidence * 100)}%`;
               ctx.font = "bold 13px sans-serif";
               const textWidth = ctx.measureText(label).width;
               ctx.fillStyle = color;
               ctx.fillRect(box.x, box.y - 26, textWidth + 14, 24);
 
-              // Label text
               ctx.fillStyle = "#fff";
               ctx.fillText(label, box.x + 7, box.y - 9);
             }
 
-            // Submit every detected face to API (backend handles cooldown)
-            if (detection.descriptor) {
+            // Submit using original descriptor from non-resized results
+            if (originalDescriptor) {
+              console.log(`[SatisfyCAM] Face ${i}: descriptor OK (${originalDescriptor.length} dims), submitting...`);
               submitToApi(
                 video,
                 box,
-                detection.descriptor,
+                originalDescriptor,
                 dominant,
                 satisfaction,
                 confidence,
                 expressions
               );
+            } else {
+              console.warn(`[SatisfyCAM] Face ${i}: NO descriptor available`);
             }
           }
 
@@ -234,7 +238,6 @@ export function useFaceDetection(
           });
 
           isProcessing.current = false;
-          }
         } catch (err) {
           console.error("Detection error:", err);
           isProcessing.current = false;
