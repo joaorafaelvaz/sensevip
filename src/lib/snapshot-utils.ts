@@ -35,15 +35,23 @@ export function cropFaceFromCanvas(
 }
 
 export async function uploadSnapshot(blob: Blob): Promise<string> {
-  const formData = new FormData();
-  formData.append("file", blob, `snapshot-${Date.now()}.jpg`);
+  try {
+    const formData = new FormData();
+    formData.append("file", blob, `snapshot-${Date.now()}.jpg`);
 
-  const res = await fetch("/api/snapshots/upload", {
-    method: "POST",
-    body: formData,
-  });
+    const res = await fetch("/api/snapshots/upload", {
+      method: "POST",
+      body: formData,
+    });
 
-  if (!res.ok) throw new Error("Failed to upload snapshot");
-  const data = await res.json();
-  return data.path;
+    if (!res.ok) {
+      console.warn("Snapshot upload failed, status:", res.status);
+      return "no-snapshot";
+    }
+    const data = await res.json();
+    return data.path;
+  } catch (err) {
+    console.warn("Snapshot upload error:", err);
+    return "no-snapshot";
+  }
 }

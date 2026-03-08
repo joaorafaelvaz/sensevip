@@ -66,26 +66,39 @@ export function useFaceDetection(
       // Fire and forget — don't block the detection loop
       (async () => {
         try {
-          const faceCanvas = cropFaceFromCanvas(video, box);
-          const blob = await canvasToBlob(faceCanvas);
-          const snapshotPath = await uploadSnapshot(blob);
+          // Try to capture snapshot, but don't block if it fails
+          let snapshotPath = "no-snapshot";
+          try {
+            const faceCanvas = cropFaceFromCanvas(video, box);
+            const blob = await canvasToBlob(faceCanvas);
+            snapshotPath = await uploadSnapshot(blob);
+          } catch (snapErr) {
+            console.warn("[SatisfyCAM] Snapshot failed, saving without:", snapErr);
+          }
+
+          const payload = {
+            descriptor: Array.from(descriptor),
+            expression: dominant,
+            satisfactionTag: satisfaction,
+            confidence,
+            rawExpressions: expressions,
+            snapshotPath,
+          };
+
+          console.log("[SatisfyCAM] Submitting detection:", dominant, satisfaction, Math.round(confidence * 100) + "%");
 
           const res = await fetch("/api/detections", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              descriptor: Array.from(descriptor),
-              expression: dominant,
-              satisfactionTag: satisfaction,
-              confidence,
-              rawExpressions: expressions,
-              snapshotPath,
-            }),
+            body: JSON.stringify(payload),
           });
 
           if (res.ok) {
             const data = await res.json();
-            if (!data.skipped) {
+            if (data.skipped) {
+              console.log("[SatisfyCAM] Skipped (cooldown) for customer:", data.customerId);
+            } else {
+              console.log("[SatisfyCAM] Saved!", data.isNew ? "NEW customer" : "Existing customer", data.customerId);
               setState((prev) => ({
                 ...prev,
                 detections: [
@@ -100,9 +113,12 @@ export function useFaceDetection(
                 ].slice(0, 50),
               }));
             }
+          } else {
+            const errBody = await res.text();
+            console.error("[SatisfyCAM] API error:", res.status, errBody);
           }
         } catch (err) {
-          console.error("API submit error:", err);
+          console.error("[SatisfyCAM] Submit error:", err);
         }
       })();
     },

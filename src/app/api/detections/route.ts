@@ -14,78 +14,88 @@ const COOLDOWN_MS = parseInt(process.env.CUSTOMER_COOLDOWN_MS || "60000", 10);
 const lastDetectionTime = new Map<string, number>();
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const {
-    descriptor,
-    expression,
-    satisfactionTag,
-    confidence,
-    rawExpressions,
-    snapshotPath,
-  } = body;
-
-  if (!descriptor || !expression || !satisfactionTag || !snapshotPath) {
-    return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
-  }
-
-  // Find matching customer
-  const customers = await prisma.customer.findMany({
-    select: { id: true, faceDescriptor: true },
-  });
-
-  const candidates = customers.map((c) => ({
-    id: c.id,
-    descriptor: deserializeDescriptor(c.faceDescriptor),
-  }));
-
-  const match = findBestMatch(descriptor, candidates, FACE_MATCH_THRESHOLD);
-
-  let customerId: string;
-  let isNew = false;
-
-  if (match) {
-    // Check cooldown
-    const lastTime = lastDetectionTime.get(match.id);
-    if (lastTime && Date.now() - lastTime < COOLDOWN_MS) {
-      return NextResponse.json({
-        skipped: true,
-        reason: "cooldown",
-        customerId: match.id,
-      });
-    }
-
-    customerId = match.id;
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { visitCount: { increment: 1 } },
-    });
-    lastDetectionTime.set(customerId, Date.now());
-  } else {
-    // New customer
-    const customer = await prisma.customer.create({
-      data: {
-        faceDescriptor: JSON.stringify(descriptor),
-        snapshotPath,
-      },
-    });
-    customerId = customer.id;
-    isNew = true;
-    lastDetectionTime.set(customerId, Date.now());
-  }
-
-  // Create detection record
-  const detection = await prisma.detection.create({
-    data: {
-      customerId,
-      snapshotPath,
+  try {
+    const body = await req.json();
+    const {
+      descriptor,
       expression,
       satisfactionTag,
       confidence,
-      rawExpressions: JSON.stringify(rawExpressions),
-    },
-  });
+      rawExpressions,
+      snapshotPath,
+    } = body;
 
-  return NextResponse.json({ detection, isNew, customerId });
+    if (!descriptor || !expression || !satisfactionTag) {
+      return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+    }
+
+    const snapshot = snapshotPath || "no-snapshot";
+
+    // Find matching customer
+    const customers = await prisma.customer.findMany({
+      select: { id: true, faceDescriptor: true },
+    });
+
+    const candidates = customers.map((c) => ({
+      id: c.id,
+      descriptor: deserializeDescriptor(c.faceDescriptor),
+    }));
+
+    const match = findBestMatch(descriptor, candidates, FACE_MATCH_THRESHOLD);
+
+    let customerId: string;
+    let isNew = false;
+
+    if (match) {
+      // Check cooldown
+      const lastTime = lastDetectionTime.get(match.id);
+      if (lastTime && Date.now() - lastTime < COOLDOWN_MS) {
+        return NextResponse.json({
+          skipped: true,
+          reason: "cooldown",
+          customerId: match.id,
+        });
+      }
+
+      customerId = match.id;
+      await prisma.customer.update({
+        where: { id: customerId },
+        data: { visitCount: { increment: 1 } },
+      });
+      lastDetectionTime.set(customerId, Date.now());
+    } else {
+      // New customer
+      const customer = await prisma.customer.create({
+        data: {
+          faceDescriptor: JSON.stringify(descriptor),
+          snapshotPath: snapshot,
+        },
+      });
+      customerId = customer.id;
+      isNew = true;
+      lastDetectionTime.set(customerId, Date.now());
+    }
+
+    // Create detection record
+    const detection = await prisma.detection.create({
+      data: {
+        customerId,
+        snapshotPath: snapshot,
+        expression,
+        satisfactionTag,
+        confidence,
+        rawExpressions: JSON.stringify(rawExpressions),
+      },
+    });
+
+    return NextResponse.json({ detection, isNew, customerId });
+  } catch (err) {
+    console.error("POST /api/detections error:", err);
+    return NextResponse.json(
+      { error: "Erro interno ao salvar detecção" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function GET(req: NextRequest) {
