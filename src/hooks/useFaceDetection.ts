@@ -23,7 +23,6 @@ interface FaceDetectionState {
 }
 
 const DETECTION_INTERVAL = 1500;
-const API_SUBMIT_INTERVAL = 10000; // Only submit to API every 10s per face
 const MIN_CONFIDENCE = 0.4;
 
 export function useFaceDetection(
@@ -41,7 +40,6 @@ export function useFaceDetection(
 
   const animFrameRef = useRef<number | null>(null);
   const lastDetectionTime = useRef<number>(0);
-  const lastApiSubmitTime = useRef<number>(0);
   const lastFrameTime = useRef<number>(0);
   const isProcessing = useRef(false);
 
@@ -133,9 +131,7 @@ export function useFaceDetection(
       lastDetectionTime.current = now;
       isProcessing.current = true;
 
-      const shouldSubmitApi = now - lastApiSubmitTime.current >= API_SUBMIT_INTERVAL;
-
-      const inputSize = shouldSubmitApi ? 224 : 160;
+      const inputSize = 224;
 
       // Run detection async
       (async () => {
@@ -200,9 +196,8 @@ export function useFaceDetection(
               ctx.fillText(label, box.x + 7, box.y - 9);
             }
 
-            // Submit to API only on the slower interval
-            if (shouldSubmitApi && detection.descriptor) {
-              lastApiSubmitTime.current = now;
+            // Submit every detected face to API (backend handles cooldown)
+            if (detection.descriptor) {
               submitToApi(
                 video,
                 box,
@@ -237,7 +232,6 @@ export function useFaceDetection(
   const startDetection = useCallback(() => {
     setState((prev) => ({ ...prev, isDetecting: true }));
     lastDetectionTime.current = 0;
-    lastApiSubmitTime.current = 0;
     lastFrameTime.current = 0;
     isProcessing.current = false;
     animFrameRef.current = requestAnimationFrame(detectLoop);
