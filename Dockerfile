@@ -1,6 +1,5 @@
 # --- Stage 1: Dependencies ---
 FROM node:20-alpine AS deps
-RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --only=production
@@ -12,7 +11,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ENV PRISMA_ENGINES_MIRROR=https://binaries.prisma.sh
 RUN npx prisma generate
 RUN npm run build
 
@@ -20,16 +18,13 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Prisma requires OpenSSL
-RUN apk add --no-cache openssl
+# Prisma on Alpine needs OpenSSL 3 libs
+RUN apk add --no-cache openssl libssl3 libcrypto3
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-# Prisma needs these
+# Prisma client + engine
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
@@ -40,14 +35,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Data & storage directories
-RUN mkdir -p /app/data /app/data/snapshots && chown -R nextjs:nodejs /app/data
-
-# Entrypoint: run migrations then start
+# Entrypoint handles permissions + migrations
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
-
-USER nextjs
 
 EXPOSE 3007
 
