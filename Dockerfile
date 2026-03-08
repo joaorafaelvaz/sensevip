@@ -24,18 +24,21 @@ RUN apk add --no-cache openssl libssl3 libcrypto3
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Prisma client + engine
-COPY --from=builder /app/prisma ./prisma
+# Prisma CLI + client + engines (needed for migrations at startup)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/prisma ./prisma
+
+# Create .bin symlink so npx prisma works
+RUN mkdir -p node_modules/.bin && ln -s ../prisma/build/index.js node_modules/.bin/prisma
 
 # Next.js standalone output
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Entrypoint handles permissions + migrations
+# Entrypoint handles migrations + start
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
