@@ -23,7 +23,9 @@ interface FaceDetectionState {
 }
 
 const DETECTION_INTERVAL = 2000;
-const MIN_CONFIDENCE = 0.3;
+const SCORE_THRESHOLD = 0.15;
+const MIN_DETECTION_SCORE = 0.20;
+const MIN_FACE_SIZE = 30;
 
 export function useFaceDetection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -150,16 +152,24 @@ export function useFaceDetection(
       // Run detection async
       (async () => {
         try {
-          const results = await faceapi
+          const allResults = await faceapi
             .detectAllFaces(
               video,
               new faceapi.SsdMobilenetv1Options({
-                minConfidence: MIN_CONFIDENCE,
+                minConfidence: SCORE_THRESHOLD,
               })
             )
             .withFaceLandmarks()
             .withFaceExpressions()
             .withFaceDescriptors();
+
+          // Filter: min detection score + min face size (prevents tiny false positives)
+          const results = allResults.filter((r) => {
+            const box = r.detection.box;
+            return r.detection.score >= MIN_DETECTION_SCORE &&
+              box.width >= MIN_FACE_SIZE &&
+              box.height >= MIN_FACE_SIZE;
+          });
 
           console.log(`[SatisfyCAM] Detection found ${results.length} face(s)`);
 
