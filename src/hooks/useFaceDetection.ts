@@ -22,8 +22,8 @@ interface FaceDetectionState {
   detections: LiveDetection[];
 }
 
-const DETECTION_INTERVAL = 1500;
-const MIN_CONFIDENCE = 0.4;
+const DETECTION_INTERVAL = 2000;
+const MIN_CONFIDENCE = 0.3;
 
 export function useFaceDetection(
   videoRef: React.RefObject<HTMLVideoElement | null>,
@@ -147,17 +147,14 @@ export function useFaceDetection(
       lastDetectionTime.current = now;
       isProcessing.current = true;
 
-      const inputSize = 224;
-
       // Run detection async
       (async () => {
         try {
           const results = await faceapi
             .detectAllFaces(
               video,
-              new faceapi.TinyFaceDetectorOptions({
-                inputSize,
-                scoreThreshold: MIN_CONFIDENCE,
+              new faceapi.SsdMobilenetv1Options({
+                minConfidence: MIN_CONFIDENCE,
               })
             )
             .withFaceLandmarks()
