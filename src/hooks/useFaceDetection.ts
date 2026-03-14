@@ -40,9 +40,7 @@ export function useFaceDetection(
     detections: [],
   });
 
-  const animFrameRef = useRef<number | null>(null);
-  const lastDetectionTime = useRef<number>(0);
-  const lastFrameTime = useRef<number>(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isProcessing = useRef(false);
 
   const loadModels = useCallback(async () => {
@@ -127,151 +125,123 @@ export function useFaceDetection(
     []
   );
 
-  const detectLoop = useCallback(() => {
+  const runDetection = useCallback(async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.paused || video.ended || !isActive) return;
+    if (isProcessing.current) return;
 
-    const now = performance.now();
+    isProcessing.current = true;
 
-    // FPS counter
-    if (lastFrameTime.current > 0) {
-      const fps = Math.round(1000 / (now - lastFrameTime.current));
+    try {
+      const allResults = await faceapi
+        .detectAllFaces(
+          video,
+          new faceapi.SsdMobilenetv1Options({
+            minConfidence: SCORE_THRESHOLD,
+          })
+        )
+        .withFaceLandmarks()
+        .withFaceExpressions()
+        .withFaceDescriptors();
+
+      // Filter: min detection score + min face size (prevents tiny false positives)
+      const results = allResults.filter((r) => {
+        const box = r.detection.box;
+        return r.detection.score >= MIN_DETECTION_SCORE &&
+          box.width >= MIN_FACE_SIZE &&
+          box.height >= MIN_FACE_SIZE;
+      });
+
+      console.log(`[SatisfyCAM] Detection found ${results.length} face(s)`);
+
+      const displaySize = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+      };
+      faceapi.matchDimensions(canvas, displaySize);
+      const resized = faceapi.resizeResults(results, displaySize);
+
+      // Draw overlays
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      for (let i = 0; i < resized.length; i++) {
+        const detection = resized[i];
+        const originalDescriptor = results[i]?.descriptor;
+        const expressions =
+          detection.expressions as unknown as ExpressionScores;
+        const satisfaction = mapExpressionToSatisfaction(expressions);
+        const dominant = getDominantExpression(expressions);
+        const confidence = Math.max(...Object.values(expressions));
+
+        const box = detection.detection.box;
+        if (ctx) {
+          const color =
+            satisfaction === "SATISFIED"
+              ? "#22c55e"
+              : satisfaction === "UNSATISFIED"
+              ? "#ef4444"
+              : "#eab308";
+
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+          const label = `${dominant} ${Math.round(confidence * 100)}%`;
+          ctx.font = "bold 13px sans-serif";
+          const textWidth = ctx.measureText(label).width;
+          ctx.fillStyle = color;
+          ctx.fillRect(box.x, box.y - 26, textWidth + 14, 24);
+
+          ctx.fillStyle = "#fff";
+          ctx.fillText(label, box.x + 7, box.y - 9);
+        }
+
+        if (originalDescriptor) {
+          submitToApi(
+            video,
+            box,
+            originalDescriptor,
+            dominant,
+            satisfaction,
+            confidence,
+            expressions
+          );
+        }
+      }
+
       setState((prev) => {
-        if (prev.fps !== fps) return { ...prev, fps };
+        if (prev.facesDetected !== resized.length) {
+          return { ...prev, facesDetected: resized.length };
+        }
         return prev;
       });
+    } catch (err) {
+      console.error("Detection error:", err);
+    } finally {
+      isProcessing.current = false;
     }
-    lastFrameTime.current = now;
-
-    // Only run detection at interval, not every frame
-    if (now - lastDetectionTime.current >= DETECTION_INTERVAL && !isProcessing.current) {
-      lastDetectionTime.current = now;
-      isProcessing.current = true;
-
-      // Run detection async
-      (async () => {
-        try {
-          const allResults = await faceapi
-            .detectAllFaces(
-              video,
-              new faceapi.SsdMobilenetv1Options({
-                minConfidence: SCORE_THRESHOLD,
-              })
-            )
-            .withFaceLandmarks()
-            .withFaceExpressions()
-            .withFaceDescriptors();
-
-          // Filter: min detection score + min face size (prevents tiny false positives)
-          const results = allResults.filter((r) => {
-            const box = r.detection.box;
-            return r.detection.score >= MIN_DETECTION_SCORE &&
-              box.width >= MIN_FACE_SIZE &&
-              box.height >= MIN_FACE_SIZE;
-          });
-
-          console.log(`[SatisfyCAM] Detection found ${results.length} face(s)`);
-
-          const displaySize = {
-            width: video.videoWidth,
-            height: video.videoHeight,
-          };
-          faceapi.matchDimensions(canvas, displaySize);
-          const resized = faceapi.resizeResults(results, displaySize);
-
-          // Draw overlays
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-          }
-
-          for (let i = 0; i < resized.length; i++) {
-            const detection = resized[i];
-            // Use original result's descriptor (resizeResults may not preserve it)
-            const originalDescriptor = results[i]?.descriptor;
-            const expressions =
-              detection.expressions as unknown as ExpressionScores;
-            const satisfaction = mapExpressionToSatisfaction(expressions);
-            const dominant = getDominantExpression(expressions);
-            const confidence = Math.max(...Object.values(expressions));
-
-            // Draw bounding box
-            const box = detection.detection.box;
-            if (ctx) {
-              const color =
-                satisfaction === "SATISFIED"
-                  ? "#22c55e"
-                  : satisfaction === "UNSATISFIED"
-                  ? "#ef4444"
-                  : "#eab308";
-
-              ctx.strokeStyle = color;
-              ctx.lineWidth = 2;
-              ctx.strokeRect(box.x, box.y, box.width, box.height);
-
-              const label = `${dominant} ${Math.round(confidence * 100)}%`;
-              ctx.font = "bold 13px sans-serif";
-              const textWidth = ctx.measureText(label).width;
-              ctx.fillStyle = color;
-              ctx.fillRect(box.x, box.y - 26, textWidth + 14, 24);
-
-              ctx.fillStyle = "#fff";
-              ctx.fillText(label, box.x + 7, box.y - 9);
-            }
-
-            // Submit using original descriptor from non-resized results
-            if (originalDescriptor) {
-              console.log(`[SatisfyCAM] Face ${i}: descriptor OK (${originalDescriptor.length} dims), submitting...`);
-              submitToApi(
-                video,
-                box,
-                originalDescriptor,
-                dominant,
-                satisfaction,
-                confidence,
-                expressions
-              );
-            } else {
-              console.warn(`[SatisfyCAM] Face ${i}: NO descriptor available`);
-            }
-          }
-
-          setState((prev) => {
-            if (prev.facesDetected !== resized.length) {
-              return { ...prev, facesDetected: resized.length };
-            }
-            return prev;
-          });
-
-          isProcessing.current = false;
-        } catch (err) {
-          console.error("Detection error:", err);
-          isProcessing.current = false;
-        }
-      })();
-    }
-
-    animFrameRef.current = requestAnimationFrame(detectLoop);
   }, [videoRef, canvasRef, isActive, submitToApi]);
 
   const startDetection = useCallback(() => {
     setState((prev) => ({ ...prev, isDetecting: true }));
-    lastDetectionTime.current = 0;
-    lastFrameTime.current = 0;
     isProcessing.current = false;
-    animFrameRef.current = requestAnimationFrame(detectLoop);
-  }, [detectLoop]);
+    // Run first detection immediately, then at interval
+    runDetection();
+    intervalRef.current = setInterval(runDetection, DETECTION_INTERVAL);
+  }, [runDetection]);
 
   const stopDetection = useCallback(() => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     isProcessing.current = false;
     setState((prev) => ({ ...prev, isDetecting: false, facesDetected: 0 }));
 
-    // Clear canvas
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");

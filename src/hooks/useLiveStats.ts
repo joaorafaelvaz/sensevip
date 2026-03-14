@@ -32,8 +32,8 @@ export function useLiveStats() {
   useEffect(() => {
     fetchStats();
 
-    // Poll every 5 seconds for live updates
-    const interval = setInterval(fetchStats, 5000);
+    // Poll every 15 seconds for live updates (reduced from 5s for performance)
+    const interval = setInterval(fetchStats, 15000);
     setIsConnected(true);
 
     return () => {

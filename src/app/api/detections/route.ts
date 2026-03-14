@@ -9,9 +9,41 @@ const FACE_MATCH_THRESHOLD = parseFloat(
   process.env.FACE_MATCH_THRESHOLD || "0.45"
 );
 const COOLDOWN_MS = parseInt(process.env.CUSTOMER_COOLDOWN_MS || "60000", 10);
+const CACHE_TTL_MS = 60_000; // Reload customer cache every 60s
 
 // Track last detection time per customer to enforce cooldown
 const lastDetectionTime = new Map<string, number>();
+
+// Customer descriptor cache to avoid loading ALL customers from DB every detection
+let customerCache: { id: string; descriptor: number[] }[] = [];
+let cacheLastLoaded = 0;
+
+async function getCustomerDescriptors() {
+  const now = Date.now();
+  if (now - cacheLastLoaded > CACHE_TTL_MS) {
+    const customers = await prisma.customer.findMany({
+      select: { id: true, faceDescriptor: true },
+    });
+    customerCache = customers.map((c) => ({
+      id: c.id,
+      descriptor: deserializeDescriptor(c.faceDescriptor),
+    }));
+    cacheLastLoaded = now;
+
+    // Clean up expired cooldowns while we're here
+    const entries = Array.from(lastDetectionTime.entries());
+    for (const [id, time] of entries) {
+      if (now - time > COOLDOWN_MS * 2) {
+        lastDetectionTime.delete(id);
+      }
+    }
+  }
+  return customerCache;
+}
+
+function invalidateCustomerCache() {
+  cacheLastLoaded = 0;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,16 +63,8 @@ export async function POST(req: NextRequest) {
 
     const snapshot = snapshotPath || "no-snapshot";
 
-    // Find matching customer
-    const customers = await prisma.customer.findMany({
-      select: { id: true, faceDescriptor: true },
-    });
-
-    const candidates = customers.map((c) => ({
-      id: c.id,
-      descriptor: deserializeDescriptor(c.faceDescriptor),
-    }));
-
+    // Find matching customer (uses cached descriptors)
+    const candidates = await getCustomerDescriptors();
     const match = findBestMatch(descriptor, candidates, FACE_MATCH_THRESHOLD);
 
     let customerId: string;
@@ -74,6 +98,7 @@ export async function POST(req: NextRequest) {
       customerId = customer.id;
       isNew = true;
       lastDetectionTime.set(customerId, Date.now());
+      invalidateCustomerCache();
     }
 
     // Create detection record
@@ -112,35 +137,56 @@ export async function GET(req: NextRequest) {
   const startOfDay = new Date(`${date}T00:00:00.000Z`);
   const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
-  const detections = await prisma.detection.findMany({
+  // Use aggregation for stats instead of loading all records
+  const [counts, recentDetections] = await Promise.all([
+    prisma.detection.groupBy({
+      by: ["satisfactionTag"],
+      where: { timestamp: { gte: startOfDay, lte: endOfDay } },
+      _count: true,
+      _avg: { confidence: true },
+    }),
+    prisma.detection.findMany({
+      where: { timestamp: { gte: startOfDay, lte: endOfDay } },
+      orderBy: { timestamp: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        customerId: true,
+        timestamp: true,
+        snapshotPath: true,
+        expression: true,
+        satisfactionTag: true,
+        confidence: true,
+        rawExpressions: true,
+      },
+    }),
+  ]);
+
+  // Count unique customers from today
+  const uniqueCount = await prisma.detection.findMany({
     where: { timestamp: { gte: startOfDay, lte: endOfDay } },
-    orderBy: { timestamp: "desc" },
-    take: 100,
+    distinct: ["customerId"],
+    select: { customerId: true },
   });
 
-  const uniqueCustomers = new Set(detections.map((d) => d.customerId));
-  const satisfied = detections.filter(
-    (d) => d.satisfactionTag === "SATISFIED"
-  ).length;
-  const neutral = detections.filter(
-    (d) => d.satisfactionTag === "NEUTRAL"
-  ).length;
-  const unsatisfied = detections.filter(
-    (d) => d.satisfactionTag === "UNSATISFIED"
-  ).length;
-  const avgConfidence =
-    detections.length > 0
-      ? detections.reduce((sum, d) => sum + d.confidence, 0) /
-        detections.length
-      : 0;
+  let satisfied = 0, neutral = 0, unsatisfied = 0, totalConf = 0, totalCount = 0;
+  for (const g of counts) {
+    const c = g._count;
+    totalCount += c;
+    totalConf += (g._avg.confidence || 0) * c;
+    if (g.satisfactionTag === "SATISFIED") satisfied = c;
+    else if (g.satisfactionTag === "NEUTRAL") neutral = c;
+    else if (g.satisfactionTag === "UNSATISFIED") unsatisfied = c;
+  }
+  const avgConfidence = totalCount > 0 ? Math.round((totalConf / totalCount) * 100) / 100 : 0;
 
   return NextResponse.json({
-    totalCustomers: uniqueCustomers.size,
+    totalCustomers: uniqueCount.length,
     satisfied,
     neutral,
     unsatisfied,
-    avgConfidence: Math.round(avgConfidence * 100) / 100,
-    recentDetections: detections.slice(0, 20).map((d) => ({
+    avgConfidence,
+    recentDetections: recentDetections.map((d) => ({
       id: d.id,
       customerId: d.customerId,
       timestamp: d.timestamp.toISOString(),

@@ -39,6 +39,12 @@ services:
       - NEXT_PUBLIC_STORE_NAME=${STORE_NAME:-Barbearia VIP Santa Mônica}
       - PORT=3007
       - HOSTNAME=0.0.0.0
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     volumes:
       - satisfycam-data:/app/data
     healthcheck:
