@@ -42,9 +42,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 4G
         reservations:
-          memory: 256M
+          memory: 1G
     volumes:
       - satisfycam-data:/app/data
     healthcheck:

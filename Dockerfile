@@ -23,7 +23,7 @@ RUN apk add --no-cache openssl libssl3 libcrypto3
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=256"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Prisma CLI + client + engines (needed for migrations at startup)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
