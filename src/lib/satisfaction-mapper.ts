@@ -22,7 +22,7 @@ export type Expression =
 export function mapExpressionToSatisfaction(
   expressions: ExpressionScores
 ): Satisfaction {
-  const { happy, surprised, sad, angry, disgusted, fearful, neutral } = expressions;
+  const { happy, surprised, sad, angry, disgusted, fearful } = expressions;
 
   // Surveillance camera strategy: compare positive vs negative signals directly.
   // Even tiny values matter since neutral typically dominates at 85-99%.
