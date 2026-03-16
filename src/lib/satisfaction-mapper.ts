@@ -22,37 +22,31 @@ export type Expression =
 export function mapExpressionToSatisfaction(
   expressions: ExpressionScores
 ): Satisfaction {
-  // Positive and negative signal strength (ignoring neutral)
-  const positive = expressions.happy + expressions.surprised * 0.5;
-  const negative =
-    expressions.sad +
-    expressions.angry +
-    expressions.disgusted +
-    expressions.fearful * 0.5;
+  const { happy, surprised, sad, angry, disgusted, fearful, neutral } = expressions;
 
-  // In surveillance cameras, neutral dominates (~85%+).
-  // Focus on the relative strength of non-neutral expressions.
-  const nonNeutral = 1 - expressions.neutral;
+  // Surveillance camera strategy: compare positive vs negative signals directly.
+  // Even tiny values matter since neutral typically dominates at 85-99%.
+  const positive = happy + surprised * 0.4;
+  const negative = sad + angry + disgusted + fearful * 0.4;
 
-  // If face is almost entirely neutral (>95%), use weighted score with low thresholds
-  if (nonNeutral < 0.05) {
-    return "NEUTRAL";
+  // Strategy 1: Clear dominant expression (not neutral)
+  // Find highest non-neutral expression
+  const nonNeutralScores = { happy, surprised, sad, angry, disgusted, fearful };
+  const sorted = Object.entries(nonNeutralScores).sort((a, b) => b[1] - a[1]);
+  const [topExpr, topScore] = sorted[0];
+
+  // If any non-neutral expression is above a very low threshold (3%), use it
+  if (topScore >= 0.03) {
+    if (topExpr === "happy" || topExpr === "surprised") return "SATISFIED";
+    if (topExpr === "sad" || topExpr === "angry" || topExpr === "disgusted") return "UNSATISFIED";
+    // fearful → lean negative
+    if (topExpr === "fearful") return "UNSATISFIED";
   }
 
-  // Ratio of positive vs negative among non-neutral expressions
-  const positiveRatio = nonNeutral > 0 ? positive / nonNeutral : 0;
-  const negativeRatio = nonNeutral > 0 ? negative / nonNeutral : 0;
-
-  // Thresholds tuned for surveillance cameras:
-  // - happy >= 0.08 (subtle smile) → SATISFIED
-  // - positiveRatio > 60% of non-neutral → SATISFIED
-  // - negative expressions dominate → UNSATISFIED
-  if (expressions.happy >= 0.08 || positiveRatio > 0.6) {
-    return "SATISFIED";
-  }
-  if (negative >= 0.08 || negativeRatio > 0.6) {
-    return "UNSATISFIED";
-  }
+  // Strategy 2: Compare aggregate positive vs negative
+  // Even at very low levels, if positive > negative → SATISFIED
+  if (positive > 0.02 && positive > negative * 1.5) return "SATISFIED";
+  if (negative > 0.02 && negative > positive * 1.5) return "UNSATISFIED";
 
   return "NEUTRAL";
 }
