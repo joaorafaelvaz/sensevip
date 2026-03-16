@@ -201,6 +201,7 @@ export function useFaceDetection(
         }
 
         if (originalDescriptor) {
+          console.log(`[SatisfyCAM] Face ${i}: ${dominant} → ${satisfaction} | h:${expressions.happy.toFixed(2)} n:${expressions.neutral.toFixed(2)} s:${expressions.sad.toFixed(2)} a:${expressions.angry.toFixed(2)} su:${expressions.surprised.toFixed(2)}`);
           submitToApi(
             video,
             box,

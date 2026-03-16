@@ -22,17 +22,38 @@ export type Expression =
 export function mapExpressionToSatisfaction(
   expressions: ExpressionScores
 ): Satisfaction {
-  const score =
-    expressions.happy * 1.0 +
-    expressions.surprised * 0.3 +
-    expressions.neutral * 0.0 +
-    expressions.fearful * -0.3 +
-    expressions.sad * -0.7 +
-    expressions.disgusted * -0.9 +
-    expressions.angry * -1.0;
+  // Positive and negative signal strength (ignoring neutral)
+  const positive = expressions.happy + expressions.surprised * 0.5;
+  const negative =
+    expressions.sad +
+    expressions.angry +
+    expressions.disgusted +
+    expressions.fearful * 0.5;
 
-  if (score >= 0.3) return "SATISFIED";
-  if (score <= -0.2) return "UNSATISFIED";
+  // In surveillance cameras, neutral dominates (~85%+).
+  // Focus on the relative strength of non-neutral expressions.
+  const nonNeutral = 1 - expressions.neutral;
+
+  // If face is almost entirely neutral (>95%), use weighted score with low thresholds
+  if (nonNeutral < 0.05) {
+    return "NEUTRAL";
+  }
+
+  // Ratio of positive vs negative among non-neutral expressions
+  const positiveRatio = nonNeutral > 0 ? positive / nonNeutral : 0;
+  const negativeRatio = nonNeutral > 0 ? negative / nonNeutral : 0;
+
+  // Thresholds tuned for surveillance cameras:
+  // - happy >= 0.08 (subtle smile) → SATISFIED
+  // - positiveRatio > 60% of non-neutral → SATISFIED
+  // - negative expressions dominate → UNSATISFIED
+  if (expressions.happy >= 0.08 || positiveRatio > 0.6) {
+    return "SATISFIED";
+  }
+  if (negative >= 0.08 || negativeRatio > 0.6) {
+    return "UNSATISFIED";
+  }
+
   return "NEUTRAL";
 }
 
